@@ -1,29 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  LayoutDashboard, 
-  Gamepad2, 
-  Extension, 
-  Trophy, 
-  User, 
-  Settings, 
-  HelpCircle, 
   Zap, 
   Timer, 
-  Activity,
+  Settings,
   Globe,
-  Plus
+  Plus,
+  User,
+  LayoutDashboard
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import Sidebar from '../components/Sidebar';
 
 function Dashboard() {
-  const sidebarItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', active: true },
-    { icon: Gamepad2, label: 'Play', active: false },
-    { icon: Trophy, label: 'Puzzles', active: false },
-    { icon: Activity, label: 'Rankings', active: false },
-    { icon: User, label: 'Profile', active: false },
-  ];
-
   const rankings = [
     { rank: '01', name: 'Kofi_Annan', region: 'Ghana', elo: 2842, avatar: 'KA' },
     { rank: '02', name: 'Olu_Blitz', region: 'Nigeria', elo: 2815, avatar: 'OB' },
@@ -32,46 +19,8 @@ function Dashboard() {
   ];
 
   return (
-    <div className="flex h-screen bg-[#0E1013] text-white font-sans overflow-hidden">
-      
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#0A0C0F] border-r border-white/5 flex flex-col p-6">
-        <div className="mb-10">
-           <h2 className="text-xl font-black tracking-wider">Knight<span className="text-[#FF5A1F]">Link</span></h2>
-           <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Grandmaster Tier</p>
-        </div>
-
-        <nav className="flex-1 space-y-2">
-          {sidebarItems.map((item, idx) => (
-            <div 
-              key={idx} 
-              className={`flex items-center gap-4 px-4 py-3 rounded-lg cursor-pointer transition-all ${
-                item.active ? 'bg-[#FF5A1F]/10 text-[#FF5A1F] border border-[#FF5A1F]/20' : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <item.icon size={20} />
-              <span className="font-semibold text-sm">{item.label}</span>
-            </div>
-          ))}
-        </nav>
-
-        <div className="mt-auto space-y-4">
-           <button className="w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold py-4 rounded-xl shadow-lg shadow-[#FF5A1F]/20 transition-all active:scale-95 text-sm">
-             Quick Match
-           </button>
-           
-           <div className="space-y-2 pt-4 border-t border-white/5">
-              <div className="flex items-center gap-4 px-4 py-2 text-gray-400 hover:text-white cursor-pointer text-sm font-medium">
-                <Settings size={18} />
-                <span>Settings</span>
-              </div>
-              <div className="flex items-center gap-4 px-4 py-2 text-gray-400 hover:text-white cursor-pointer text-sm font-medium">
-                <HelpCircle size={18} />
-                <span>Help</span>
-              </div>
-           </div>
-        </div>
-      </aside>
+    <div className="flex bg-[#0E1013] text-white font-sans">
+      <Sidebar />
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_50%_0%,_rgba(255,90,31,0.03)_0%,_transparent_50%)]">

@@ -1,10 +1,47 @@
 import React from 'react';
+const { useState } = React;
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 import '../App.css';
 
 function Login() {
-  const [showPassword, setShowPassword] = React.useState(false);
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const [formData, setFormData] = useState({
+    username: '',
+    password: ''
+  });
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/login/', {
+        username: formData.username,
+        password: formData.password
+      });
+
+      if (response.status === 200) {
+        // En vrai on stockerait un token ici (JWT)
+        // localStorage.setItem('token', response.data.token);
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0E1013] text-white flex items-center justify-center font-sans tracking-wide">
@@ -13,15 +50,8 @@ function Login() {
         {/* Left Side - Image/Brand */}
         <div className="hidden md:flex flex-col items-start max-w-[450px] w-full">
            <div className="relative w-full aspect-square bg-[#121418] rounded-3xl flex items-center justify-center overflow-hidden group shadow-2xl border border-white/5">
-             {/* Dynamic Glowing effect behind knight */}
              <div className="absolute inset-0 bg-[#FF5A1F] opacity-[0.1] blur-[80px] group-hover:opacity-25 transition-opacity duration-1000"></div>
-             
-             {/* The Real Knight Image */}
-             <img 
-               src="/hero-knight.png" 
-               alt="Knight Link Hero" 
-               className="relative z-10 w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-1000 ease-out"
-             />
+             <img src="/hero-knight.png" alt="Knight Link Hero" className="relative z-10 w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-1000 ease-out" />
            </div>
            
            <h1 className="text-5xl font-black text-[#FF5A1F] mt-10 mb-4 tracking-tight drop-shadow-[0_2px_10px_rgba(255,90,31,0.2)]">Master the Craft</h1>
@@ -49,7 +79,12 @@ function Login() {
            <h3 className="text-2xl font-bold text-white mb-2">Welcome Back</h3>
            <p className="text-gray-400 text-sm mb-10">Enter your details to resume your journey.</p>
 
-           <form className="space-y-6">
+           <form className="space-y-6" onSubmit={handleLogin}>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-3 rounded-lg text-xs font-bold text-center">
+                  {error}
+                </div>
+              )}
              <div className="space-y-2">
                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Email or Username</label>
                <div className="relative group">
@@ -58,9 +93,13 @@ function Login() {
                  </div>
                  <input 
                    type="text" 
+                   name="username"
+                   value={formData.username}
+                   onChange={handleChange}
                    autoComplete="off"
                    placeholder="grandmaster_kofi"
                    className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3.5 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[15px] hover:bg-[#181a1f]"
+                   required
                  />
                </div>
              </div>
@@ -73,9 +112,13 @@ function Login() {
                  </div>
                  <input 
                    type={showPassword ? "text" : "password"} 
+                   name="password"
+                   value={formData.password}
+                   onChange={handleChange}
                    autoComplete="off"
                    placeholder="••••••••"
                    className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-12 py-3.5 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[15px] tracking-[0.2em] hover:bg-[#181a1f]"
+                   required
                  />
                  <button 
                    type="button"
@@ -98,11 +141,14 @@ function Login() {
                <a href="#" className="text-[13px] text-[#FF5A1F] hover:text-[#ff7f4e] font-semibold transition-colors">Forgot password?</a>
              </div>
 
-             <button type="button" className="w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold rounded-lg py-4 mt-6 shadow-[0_4px_14px_rgba(255,90,31,0.25)] hover:shadow-[0_6px_20px_rgba(255,90,31,0.4)] transition-all transform hover:-translate-y-[1px] tracking-wide text-[15px]">
-               Login
+             <button 
+               type="submit" 
+               disabled={loading}
+               className={`w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold rounded-lg py-4 mt-6 shadow-[0_4px_14px_rgba(255,90,31,0.25)] hover:shadow-[0_6px_20px_rgba(255,90,31,0.4)] transition-all transform hover:-translate-y-[1px] tracking-wide text-[15px] ${loading ? 'opacity-50' : ''}`}
+             >
+               {loading ? 'Logging in...' : 'Login'}
              </button>
            </form>
-
            <div className="mt-10 flex items-center opacity-60">
              <div className="flex-1 h-[1px] bg-gray-700"></div>
              <span className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Or continue with</span>

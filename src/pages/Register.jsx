@@ -1,10 +1,59 @@
 import React from 'react';
-import { User, Mail, AtSign, Lock, ShieldCheck, HelpCircle, UserCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+const { useState, useEffect } = React;
+import { User, Mail, AtSign, Lock, ShieldCheck, HelpCircle, UserCircle, Eye, EyeOff } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import '../App.css';
 
 function Register() {
-  const [startingRank, setStartingRank] = React.useState('pawn');
+  const navigate = useNavigate();
+  const [startingRank, setStartingRank] = useState('pawn');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    username: '',
+    password: '',
+    confirm: ''
+  });
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (formData.password !== formData.confirm) {
+      setError("Passwords don't match!");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post('http://localhost:8000/api/register/', {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        rank: startingRank,
+        // We could also send country/region here if we added it to the form
+      });
+
+      if (response.status === 201) {
+        // Succès ! Connexion automatique (virtuelle pour l'instant)
+        // et redirection directe vers le dashboard
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.username?.[0] || err.response?.data?.email?.[0] || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const ranks = [
     { id: 'pawn', name: 'Pawn', level: 'Beginner', icon: '♟️' },
@@ -62,7 +111,12 @@ function Register() {
            <h3 className="text-2xl font-bold text-white mb-2">Create Account</h3>
            <p className="text-gray-400 text-sm mb-10">Welcome, Strategist. Fill in your details below.</p>
 
-           <form className="space-y-6">
+           <form className="space-y-6" onSubmit={handleRegister}>
+             {error && (
+               <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-3 rounded-lg text-xs font-bold text-center">
+                 {error}
+               </div>
+             )}
              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Full Name</label>
@@ -72,8 +126,12 @@ function Register() {
                     </div>
                     <input 
                       type="text" 
+                      name="fullName"
+                      value={formData.fullName}
+                      onChange={handleChange}
                       placeholder="Kwame Mensah"
                       className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      required
                     />
                   </div>
                 </div>
@@ -86,8 +144,12 @@ function Register() {
                     </div>
                     <input 
                       type="text" 
+                      name="username"
+                      value={formData.username}
+                      onChange={handleChange}
                       placeholder="savannah_king"
                       className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      required
                     />
                   </div>
                 </div>
@@ -101,8 +163,12 @@ function Register() {
                  </div>
                  <input 
                    type="email" 
+                   name="email"
+                   value={formData.email}
+                   onChange={handleChange}
                    placeholder="kwame@knightlink.com"
                    className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                   required
                  />
                </div>
              </div>
@@ -115,10 +181,21 @@ function Register() {
                       <Lock className="h-4 w-4 text-gray-500 group-focus-within:text-[#FF5A1F] transition-colors" />
                     </div>
                     <input 
-                      type="password" 
+                      type={showPassword ? "text" : "password"} 
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
                       placeholder="••••••••"
-                      className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-12 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      required
                     />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4 text-gray-500 hover:text-white transition-colors" /> : <Eye className="h-4 w-4 text-gray-500 hover:text-white transition-colors" />}
+                    </button>
                   </div>
                 </div>
 
@@ -129,9 +206,13 @@ function Register() {
                       <ShieldCheck className="h-4 w-4 text-gray-500 group-focus-within:text-[#FF5A1F] transition-colors" />
                     </div>
                     <input 
-                      type="password" 
+                      type={showPassword ? "text" : "password"} 
+                      name="confirm"
+                      value={formData.confirm}
+                      onChange={handleChange}
                       placeholder="••••••••"
-                      className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-4 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      className="w-full bg-[#14161A] border-t-0 border-x-0 border-b-2 border-gray-800 text-white pl-12 pr-12 py-3 focus:outline-none focus:border-[#FF5A1F] transition-all placeholder-gray-600 text-[14px] hover:bg-[#181a1f]"
+                      required
                     />
                   </div>
                 </div>
@@ -162,8 +243,12 @@ function Register() {
                 </div>
              </div>
 
-             <button type="button" className="w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold rounded-lg py-4 mt-6 shadow-[0_4px_14px_rgba(255,90,31,0.25)] hover:shadow-[0_6px_20px_rgba(255,90,31,0.4)] transition-all transform hover:-translate-y-[1px] tracking-wide text-[15px] flex items-center justify-center gap-2">
-               Create Account <span>→</span>
+             <button 
+               type="submit" 
+               disabled={loading}
+               className={`w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold rounded-lg py-4 mt-6 shadow-[0_4px_14px_rgba(255,90,31,0.25)] hover:shadow-[0_6px_20px_rgba(255,90,31,0.4)] transition-all transform hover:-translate-y-[1px] tracking-wide text-[15px] flex items-center justify-center gap-2 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+             >
+               {loading ? 'Creating Account...' : 'Create Account'} <span>→</span>
              </button>
            </form>
            
