@@ -5,6 +5,10 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Play from './pages/Play';
+import Puzzles from './pages/Puzzles';
+import Rankings from './pages/Rankings';
+import Watch from './pages/Watch';
+import WatchGame from './pages/WatchGame';
 
 function App() {
   return (
@@ -15,6 +19,10 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/play" element={<Play />} />
+        <Route path="/puzzles" element={<Puzzles />} />
+        <Route path="/rankings" element={<Rankings />} />
+        <Route path="/watch" element={<Watch />} />
+        <Route path="/watch/:id" element={<WatchGame />} />
         {/* Redirection vers login par défaut */}
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

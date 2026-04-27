@@ -6,7 +6,8 @@ import {
   User, 
   Settings, 
   HelpCircle, 
-  Activity
+  Activity,
+  Eye
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -18,6 +19,7 @@ function Sidebar() {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: Gamepad2, label: 'Play', path: '/play' },
     { icon: Trophy, label: 'Puzzles', path: '/puzzles' },
+    { icon: Eye, label: 'Watch', path: '/watch' },
     { icon: Activity, label: 'Rankings', path: '/rankings' },
     { icon: User, label: 'Profile', path: '/profile' },
   ];
@@ -48,7 +50,9 @@ function Sidebar() {
       </nav>
 
       <div className="mt-auto space-y-4">
-         <button className="w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold py-4 rounded-xl shadow-lg shadow-[#FF5A1F]/20 transition-all active:scale-95 text-sm">
+         <button 
+           onClick={() => navigate('/play')}
+           className="w-full bg-[#FF5A1F] hover:bg-[#ff6c35] text-white font-bold py-4 rounded-xl shadow-lg shadow-[#FF5A1F]/20 transition-all active:scale-95 text-sm">
            Quick Match
          </button>
          

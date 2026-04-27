@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import { Bell, Trophy, Flag, Hand, Info, Clock } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { getBestMove } from '../utils/engine';
 
@@ -68,41 +68,248 @@ const PieceStandard = ({ type, color }) => {
 };
 
 function Play() {
-  const [game, setGame] = useState(new Chess());
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const puzzleFen = searchParams.get('fen');
+  const puzzleSolution = searchParams.get('solution');
+  const isPuzzleMode = !!puzzleFen;
+
+  const [game, setGame] = useState(() => {
+    if (isPuzzleMode) return new Chess(puzzleFen);
+    const saved = localStorage.getItem('knightlink_active_game');
+    return saved ? new Chess(saved) : new Chess();
+  });
+
   const [selectedSquare, setSelectedSquare] = useState(null);
-  const [moveHistory, setMoveHistory] = useState([]);
+  const [moveHistory, setMoveHistory] = useState(() => {
+    return game.history({ verbose: true });
+  });
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [aiCommentary, setAiCommentary] = useState("Sawubona! À vous de jouer.");
+  const [aiCommentary, setAiCommentary] = useState(isPuzzleMode ? "🔍 Puzzle Mode: Trouvez le meilleur coup !" : "Sawubona! À vous de jouer.");
+
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [gameResult, setGameResult] = useState(null);
+  const [activeGameId, setActiveGameId] = useState(() => {
+    return localStorage.getItem('knightlink_active_game_id');
+  });
+  const [socket, setSocket] = useState(null);
+
+  // Setup WebSocket connection
+  useEffect(() => {
+    if (activeGameId && !isPuzzleMode) {
+      const ws = new WebSocket(`ws://localhost:8000/ws/game/${activeGameId}/`);
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'game_move' && data.sender !== 'player') {
+          // If we receive a move from the other side (for future PvP)
+          const newGame = new Chess(data.fen);
+          setGame(newGame);
+          setMoveHistory(newGame.history({ verbose: true }));
+        }
+      };
+      setSocket(ws);
+      return () => ws.close();
+    }
+  }, [activeGameId, isPuzzleMode]);
+
+  // Sync with Backend (Start/Update)
+  const syncGame = async (winnerId = null, statusStr = 'ongoing') => {
+    if (isPuzzleMode) return;
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) return;
+
+    try {
+      const response = await fetch('http://localhost:8000/api/record-game/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          game_id: activeGameId,
+          white_player: user.id,
+          black_player: 1, // AI
+          winner: winnerId,
+          status: statusStr,
+          pgn: game.pgn(),
+          fen: game.fen()
+        })
+      });
+      const data = await response.json();
+      
+      let currentId = activeGameId;
+      if (data.game_id && !activeGameId) {
+        currentId = data.game_id;
+        setActiveGameId(data.game_id);
+        localStorage.setItem('knightlink_active_game_id', data.game_id);
+      }
+      
+      // Broadcast via socket
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: 'game_move',
+          move: game.history().pop(),
+          fen: game.fen(),
+          sender: 'player'
+        }));
+      }
+
+      if (data.white_elo) {
+        user.elo = data.white_elo;
+        localStorage.setItem('user', JSON.stringify(user));
+      }
+    } catch (e) {
+      console.error("Failed to sync game", e);
+    }
+  };
+
+  // Initial Sync (Create game)
+  useEffect(() => {
+    if (!isPuzzleMode) syncGame();
+  }, [isPuzzleMode]);
+
+  useEffect(() => {
+    if (!isPuzzleMode) {
+      localStorage.setItem('knightlink_active_game', game.fen());
+      syncGame(); // Update FEN on server
+    }
+
+    if (game.isGameOver()) {
+      setIsGameOver(true);
+      let result = "Match Nul";
+      let winner = null;
+      let finalStatus = 'draw';
+      if (game.isCheckmate()) {
+        finalStatus = 'completed';
+        const winnerColor = game.turn() === 'w' ? 'Noirs' : 'Blancs';
+        result = `Échec et Mat ! Victoire des ${winnerColor}`;
+        winner = game.turn() === 'w' ? 1 : JSON.parse(localStorage.getItem('user'))?.id;
+      }
+      setGameResult(result);
+      if (!isPuzzleMode) {
+        syncGame(winner, finalStatus);
+        localStorage.removeItem('knightlink_active_game');
+        localStorage.removeItem('knightlink_active_game_id');
+      }
+    }
+  }, [game]);
+
+  // Broadcast AI Commentary to Watchers
+  useEffect(() => {
+    if (socket && socket.readyState === WebSocket.OPEN && aiCommentary && !isPuzzleMode) {
+      socket.send(JSON.stringify({
+        type: 'game_comment',
+        comment: aiCommentary,
+        username: 'KnightLink AI'
+      }));
+    }
+  }, [aiCommentary, socket]);
+
+  const [gameData, setGameData] = useState(null);
+
+  useEffect(() => {
+    const fetchGameData = async () => {
+      if (activeGameId) {
+        try {
+          const resp = await fetch(`http://localhost:8000/api/game/${activeGameId}/`);
+          const data = await resp.json();
+          setGameData(data);
+        } catch (e) { console.error(e); }
+      }
+    };
+    fetchGameData();
+  }, [activeGameId]);
 
   function onSquareClick(square) {
-    if (isAiThinking || game.turn() === 'b') return;
+    if (isAiThinking || (game.turn() === 'b' && !isPuzzleMode) || isGameOver) return;
+
     if (selectedSquare) {
       if (selectedSquare === square) { setSelectedSquare(null); return; }
       const gameCopy = new Chess(game.fen());
       try {
-        const move = gameCopy.move({ from: selectedSquare, to: square, promotion: 'q' });
+        const moveAttempt = { from: selectedSquare, to: square, promotion: 'q' };
+        const moveStr = `${selectedSquare}${square}`;
+        
+        // Puzzle Verification (existing logic)
+        if (isPuzzleMode && puzzleSolution) {
+          if (moveStr !== puzzleSolution && gameCopy.move(moveAttempt)?.san !== puzzleSolution) {
+             setAiCommentary("❌ Mauvais coup ! Réessayez.");
+             setSelectedSquare(null);
+             return;
+          } else {
+             setAiCommentary("✨ Incroyable ! Puzzle résolu.");
+             setIsGameOver(true);
+             setGameResult("Puzzle Résolu avec succès !");
+          }
+        }
+
+        const move = gameCopy.move(moveAttempt);
         if (move) {
           setGame(gameCopy);
           setMoveHistory(gameCopy.history({ verbose: true }));
           setSelectedSquare(null);
-          setIsAiThinking(true);
-          setTimeout(() => {
-            const aiMove = getBestMove(gameCopy.fen(), 3);
-            if (aiMove) {
-              gameCopy.move(aiMove);
-              setGame(new Chess(gameCopy.fen()));
-              setMoveHistory(gameCopy.history({ verbose: true }));
-            }
-            setIsAiThinking(false);
-          }, 800);
+          
+          // Generate Commentary based on move properties
+          let comment = "Bonne réponse.";
+          if (move.captured) comment = `Capture en ${move.to} ! La pression monte.`;
+          if (move.san.includes('+')) comment = "ÉCHEC ! Un coup magistral.";
+          if (move.promotion) comment = "Une promotion ! Un nouveau futur s'ouvre.";
+          if (move.san.includes('#')) comment = "MAT ! Fin de la légende.";
+          
+          setAiCommentary(comment);
+          
+          const isAgainstAI = !gameData || gameData.black_player === 1;
+
+          if (!isPuzzleMode && !gameCopy.isGameOver() && isAgainstAI) {
+            setIsAiThinking(true);
+            setTimeout(() => {
+              const aiMove = getBestMove(gameCopy.fen(), 3);
+              if (aiMove) {
+                const aiResult = gameCopy.move(aiMove);
+                setGame(new Chess(gameCopy.fen()));
+                setMoveHistory(gameCopy.history({ verbose: true }));
+                
+                let aiComment = "À vous de jouer.";
+                if (aiResult.captured) aiComment = "L'IA contre-attaque avec une capture !";
+                if (aiResult.san.includes('+')) aiComment = "L'IA vous met en échec ! Prudence.";
+                setAiCommentary(aiComment);
+              }
+              setIsAiThinking(false);
+            }, 800);
+          }
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log("Invalid move", e);
+      }
     }
     const piece = game.get(square);
-    if (piece && piece.color === 'w') setSelectedSquare(square);
+    if (piece && piece.color === (isPuzzleMode ? game.turn() : 'w')) setSelectedSquare(square);
     else setSelectedSquare(null);
   }
+
+  const resetGame = () => {
+    if (isPuzzleMode) {
+      setGame(new Chess(puzzleFen));
+      setMoveHistory([]);
+      setAiCommentary("🔍 Puzzle Mode: Trouvez le meilleur coup !");
+    } else {
+      localStorage.removeItem('knightlink_active_game');
+      localStorage.removeItem('knightlink_active_game_id');
+      setGame(new Chess());
+      setMoveHistory([]);
+      setAiCommentary("Partie réinitialisée. À vous de commencer !");
+      setActiveGameId(null);
+    }
+    setIsGameOver(false);
+    setGameResult(null);
+    setSelectedSquare(null);
+  };
+
+  const resign = () => {
+    if (isGameOver) return;
+    setIsGameOver(true);
+    setGameResult("Vous avez abandonné.");
+    if (!isPuzzleMode) recordResult(1, 'completed');
+    localStorage.removeItem('knightlink_active_game');
+  };
 
   const boardTiles = useMemo(() => {
     const tiles = [];
@@ -173,10 +380,14 @@ function Play() {
               </div>
 
               <div className="flex-1 bg-[#121418] border border-white/5 rounded-3xl flex flex-col overflow-hidden my-1">
-                 <div className="bg-[#0A0C0F] p-4 flex justify-between border-b border-white/5">
+                 <div className="bg-[#0A0C0F] p-4 flex justify-between border-b border-white/5 items-center">
                     <span className="text-[10px] font-black uppercase tracking-widest text-[#FF5A1F]">Match Log</span>
+                    <span className="text-[10px] font-bold text-gray-400 italic">{aiCommentary}</span>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-hide">
+                    {groupedMoves.length === 0 && (
+                      <div className="h-full flex items-center justify-center text-gray-700 text-[10px] font-black uppercase italic">No moves yet</div>
+                    )}
                     {groupedMoves.map((m, idx) => (
                        <div key={idx} className="grid grid-cols-12 text-[11px] py-1.5 px-2 hover:bg-white/5 rounded text-gray-400">
                           <span className="col-span-2 font-bold opacity-30">{m.num}.</span>
@@ -189,20 +400,76 @@ function Play() {
                  </div>
               </div>
 
-              <div className="bg-[#121418] border-l-4 border-orange-500 p-6 rounded-r-3xl shadow-lg relative">
-                 <h5 className="text-[9px] font-black text-[#FF5A1F] uppercase mb-2">Elder AI Analysis</h5>
-                 <p className="text-[12px] text-gray-400 italic font-medium leading-relaxed">"{aiCommentary}"</p>
+              {/* Game Controls */}
+              <div className="flex gap-3">
+                 <button 
+                  onClick={() => {
+                    if (isPuzzleMode) navigate('/puzzles');
+                    else resetGame();
+                  }}
+                  className="flex-1 py-4 border border-white/5 hover:bg-white/5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all text-gray-600">
+                    {isPuzzleMode ? 'Exit Puzzle' : 'Reset Game'}
+                  </button>
+                 <button 
+                  onClick={resign}
+                  className="flex-1 py-4 bg-[#241B18] border border-orange-500/20 text-[#FF5A1F] hover:bg-[#2e2320] rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95">
+                    {isPuzzleMode ? 'Give Up' : 'Resign Match'}
+                  </button>
               </div>
 
-              <div className="bg-[#121418] border border-white/5 p-5 rounded-3xl flex items-center justify-between shadow-2xl">
-                 <div className="flex items-center gap-4">
-                    <PieceStandard type="k" color="w" />
-                    <h4 className="font-bold text-sm text-gray-100 uppercase tracking-widest">Kwame_Knight</h4>
+              {/* User Card */}
+              <div className="bg-[#121418] border border-white/5 p-4 rounded-3xl flex items-center justify-between shadow-2xl">
+                 <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-inner">
+                       <PieceStandard type="k" color="w" />
+                    </div>
+                    <div>
+                       <h4 className="font-bold text-sm text-gray-100 uppercase tracking-widest">
+                        {JSON.parse(localStorage.getItem('user'))?.username || 'Guest'}
+                       </h4>
+                       <p className="text-[10px] text-green-500 font-black uppercase tracking-widest">ELO {JSON.parse(localStorage.getItem('user'))?.elo || 800}</p>
+                    </div>
                  </div>
-                 <div className="bg-[#FF5A1F] text-white px-5 py-3 rounded-xl text-3xl font-black digit-mono">08:21</div>
+                 <div className="bg-[#FF5A1F] text-white px-4 py-2 rounded-xl text-2xl font-black digit-mono shadow-[0_4px_15px_rgba(255,90,31,0.5)]">08:21</div>
               </div>
            </div>
         </div>
+
+        {/* Game Over Overlay */}
+        {isGameOver && (
+          <div className="absolute inset-0 bg-[#0A0C0F]/90 backdrop-blur-md z-[100] flex items-center justify-center animate-in fade-in duration-500">
+            <div className="bg-[#121418] border border-[#FF5A1F]/30 p-12 rounded-[40px] text-center max-w-sm w-full shadow-[0_0_100px_rgba(255,90,31,0.2)]">
+                <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-orange-500/20">
+                  <Trophy size={40} className="text-[#FF5A1F]" />
+                </div>
+                <h2 className="text-3xl font-black uppercase tracking-tighter mb-2 italic">Game Over</h2>
+                <p className="text-gray-400 font-medium mb-8 uppercase text-[10px] tracking-[0.3em]">{gameResult}</p>
+                
+                <div className="bg-[#0A0C0F] p-6 rounded-3xl border border-white/5 mb-8">
+                  <div className="flex justify-between items-center px-4">
+                    <div className="text-left">
+                      <p className="text-[9px] font-black text-gray-600 uppercase mb-1">New ELO</p>
+                      <p className="text-2xl font-black">{JSON.parse(localStorage.getItem('user'))?.elo}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-green-500 uppercase mb-1">XP Gained</p>
+                      <p className="text-xl font-black text-green-500">+12</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    if (isPuzzleMode) navigate('/puzzles');
+                    else resetGame();
+                  }}
+                  className="w-full py-5 bg-[#FF5A1F] text-white font-black uppercase text-xs tracking-[0.2em] rounded-2xl shadow-lg shadow-orange-500/30 hover:scale-105 transition-transform"
+                >
+                  {isPuzzleMode ? 'Back to Puzzles' : 'Play Again'}
+                </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
