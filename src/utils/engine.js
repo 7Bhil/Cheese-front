@@ -84,9 +84,10 @@ for (let piece in pst) {
  * Basic evaluation function.
  * Positive score means White is better, negative means Black.
  */
-function evaluateBoard(game) {
+function evaluateBoard(game, badPositions = []) {
   let totalEvaluation = 0;
   const board = game.board(); // 8x8 array
+  const currentFen = game.fen();
 
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
@@ -104,15 +105,24 @@ function evaluateBoard(game) {
       }
     }
   }
+
+  // Failure Memory: Penalize positions where AI has lost before
+  if (badPositions.some(p => currentFen.includes(p.fen.split(' ')[0]))) {
+    // If it's black's turn or black is evaluating, we want to stay away from this
+    // Since White is positive and Black is negative:
+    // To make a position "bad" for Black, we increase the score (make it more positive/white)
+    totalEvaluation += 300; 
+  }
+
   return totalEvaluation;
 }
 
 /**
  * Minimax with Alpha-Beta Pruning
  */
-function minimax(game, depth, alpha, beta, isMaximizingPlayer) {
+function minimax(game, depth, alpha, beta, isMaximizingPlayer, badPositions) {
   if (depth === 0 || game.isGameOver()) {
-    return evaluateBoard(game);
+    return evaluateBoard(game, badPositions);
   }
 
   const moves = game.moves();
@@ -121,7 +131,7 @@ function minimax(game, depth, alpha, beta, isMaximizingPlayer) {
     let bestVal = -Infinity;
     for (let i = 0; i < moves.length; i++) {
       game.move(moves[i]);
-      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer));
+      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, badPositions));
       game.undo();
       alpha = Math.max(alpha, bestVal);
       if (beta <= alpha) break;
@@ -131,7 +141,7 @@ function minimax(game, depth, alpha, beta, isMaximizingPlayer) {
     let bestVal = Infinity;
     for (let i = 0; i < moves.length; i++) {
       game.move(moves[i]);
-      bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer));
+      bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, badPositions));
       game.undo();
       beta = Math.min(beta, bestVal);
       if (beta <= alpha) break;
@@ -143,12 +153,11 @@ function minimax(game, depth, alpha, beta, isMaximizingPlayer) {
 /**
  * Returns the best move for the current player.
  */
-export function getBestMove(gameFen, depth = 3) {
+export function getBestMove(gameFen, depth = 3, badPositions = []) {
   const game = new Chess(gameFen);
   const moves = game.moves();
   if (moves.length === 0) return null;
 
-  // Simple move ordering: captures and promotions first (very basic optimization)
   moves.sort((a, b) => {
     if (a.includes('x') || a.includes('=')) return -1;
     if (b.includes('x') || b.includes('=')) return 1;
@@ -162,14 +171,10 @@ export function getBestMove(gameFen, depth = 3) {
   let alpha = -Infinity;
   let beta = Infinity;
 
-  // Track start time to limit thinking if necessary
-  const startTime = Date.now();
-
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
     game.move(move);
-    // AI depth is typically 3 for quick JS client-side evaluation without worker
-    const boardValue = minimax(game, depth - 1, alpha, beta, !isWhite);
+    const boardValue = minimax(game, depth - 1, alpha, beta, !isWhite, badPositions);
     game.undo();
 
     if (isWhite) {
@@ -185,10 +190,7 @@ export function getBestMove(gameFen, depth = 3) {
       }
       beta = Math.min(beta, bestValue);
     }
-    
-    // Safety break for browsers if we exceed 2 seconds (optional)
-    if (Date.now() - startTime > 2000) break;
   }
 
-  return bestMove || moves[Math.floor(Math.random() * moves.length)];
+  return bestMove || moves[0];
 }

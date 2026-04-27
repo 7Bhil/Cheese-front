@@ -203,9 +203,10 @@ function Play() {
   }, [aiCommentary, socket]);
 
   const [gameData, setGameData] = useState(null);
+  const [aiBrain, setAiBrain] = useState([]);
 
   useEffect(() => {
-    const fetchGameData = async () => {
+    const fetchData = async () => {
       if (activeGameId) {
         try {
           const resp = await fetch(`http://localhost:8000/api/game/${activeGameId}/`);
@@ -213,8 +214,14 @@ function Play() {
           setGameData(data);
         } catch (e) { console.error(e); }
       }
+      // Fetch AI Failure Memory
+      try {
+        const aiResp = await fetch('http://localhost:8000/api/ai-brain/');
+        const aiData = await aiResp.json();
+        setAiBrain(aiData);
+      } catch (e) { console.error(e); }
     };
-    fetchGameData();
+    fetchData();
   }, [activeGameId]);
 
   function onSquareClick(square) {
@@ -260,7 +267,7 @@ function Play() {
           if (!isPuzzleMode && !gameCopy.isGameOver() && isAgainstAI) {
             setIsAiThinking(true);
             setTimeout(() => {
-              const aiMove = getBestMove(gameCopy.fen(), 3);
+              const aiMove = getBestMove(gameCopy.fen(), 3, aiBrain);
               if (aiMove) {
                 const aiResult = gameCopy.move(aiMove);
                 setGame(new Chess(gameCopy.fen()));
